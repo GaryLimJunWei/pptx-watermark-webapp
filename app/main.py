@@ -292,8 +292,12 @@ async def process(file: UploadFile = File(...), name: str = Form(...)):
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{download_name}"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="{download_name}"',
+                "Content-Type": "application/pdf"
+            },
         )
+
 
     except HTTPException:
         raise

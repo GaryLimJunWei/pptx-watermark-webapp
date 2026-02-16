@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>PowerPoint Name Inserter</title>
+<title>PPTX → PDF Name Inserter</title>
 <style>
 body { font-family: Arial; max-width: 700px; margin: 40px auto; }
 .box { border: 2px dashed #888; padding: 30px; text-align: center; border-radius: 10px; }
@@ -16,19 +16,21 @@ progress { width: 100%; margin-top: 15px; }
 </head>
 <body>
 
-<h2>PowerPoint Watermark Web App</h2>
+<h2>PowerPoint watermark web app</h2>
 
 <div id="info">
-⚠️ If this app has not been used recently, the server may take up to <b>60 seconds</b> to wake up before processing.
+If this app has not been used recently, the server may take up to <b>60 seconds</b> to wake up before processing.
+<br><br>
+Output format: <b>PDF</b>.
 </div>
 
 <div class="box">
-<input type="file" id="file" accept=".pptx"/>
+  <input type="file" id="file" accept=".pptx"/>
 </div>
 
 <div class="row">
-<input id="name" type="text" placeholder="Enter name (e.g., TEST)">
-<button onclick="run()">Process</button>
+  <input id="name" type="text" placeholder="Enter name (will be red text)">
+  <button onclick="run()">Convert</button>
 </div>
 
 <progress id="prog" value="0" max="100" style="display:none;"></progress>
@@ -45,7 +47,7 @@ function run() {
   if (!name) return msg.textContent = "Enter a name.";
 
   msg.style.color = "#000";
-  msg.textContent = "Processing... If server was idle, it may take up to 60 seconds.";
+  msg.textContent = "Processing… If server was idle, it may take up to 60 seconds.";
   prog.style.display = "block";
   prog.value = 10;
 
@@ -53,33 +55,34 @@ function run() {
   form.append("file", f);
   form.append("name", name);
 
-  fetch("/process", {
-    method: "POST",
-    body: form
-  })
-  .then(async response => {
-    if (!response.ok) throw new Error("Server error.");
-    prog.value = 70;
-    const blob = await response.blob();
-    prog.value = 100;
+  fetch("/process", { method: "POST", body: form })
+    .then(async (response) => {
+      if (!response.ok) {
+        const text = await response.text().catch(()=> "");
+        throw new Error("Server error. " + text);
+      }
+      prog.value = 70;
 
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = f.name.replace(".pptx","") + "__named.pptx";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
+      const blob = await response.blob();
+      prog.value = 100;
 
-    msg.textContent = "Done.";
-    prog.style.display = "none";
-  })
-  .catch(err => {
-    msg.style.color = "#b00";
-    msg.textContent = "Error: " + err.message;
-    prog.style.display = "none";
-  });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      msg.textContent = "Done.";
+      prog.style.display = "none";
+    })
+    .catch(err => {
+      msg.style.color = "#b00";
+      msg.textContent = "Error: " + err.message;
+      prog.style.display = "none";
+    });
 }
 </script>
 
