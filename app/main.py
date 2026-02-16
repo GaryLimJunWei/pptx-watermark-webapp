@@ -10,6 +10,8 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
+from google.oauth2 import service_account
+
 
 import io
 import os
@@ -21,6 +23,7 @@ import smtplib
 import logging
 from email.message import EmailMessage
 from pathlib import Path
+import json
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -100,12 +103,32 @@ def get_drive_service_oauth():
 
     return build("drive", "v3", credentials=creds)
 
+def get_drive_service():
+    """
+    Uses Service Account if GOOGLE_SERVICE_ACCOUNT_JSON is set.
+    Falls back to OAuth if not.
+    """
+    sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+
+    if sa_json:
+        info = json.loads(sa_json)
+        creds = service_account.Credentials.from_service_account_info(
+            info,
+            scopes=["https://www.googleapis.com/auth/drive.file"],
+        )
+        return build("drive", "v3", credentials=creds)
+
+    # fallback to OAuth (if ever needed)
+    return get_drive_service_oauth()
+
+
 
 def upload_original_to_drive(original_bytes: bytes, original_filename: str) -> str:
     """
     Upload ONLY the original PPTX into the target Drive folder. Returns fileId.
     """
-    service = get_drive_service_oauth()
+    service = get_drive_service()
+
 
     media = MediaIoBaseUpload(
         io.BytesIO(original_bytes),
