@@ -147,10 +147,22 @@ def upload_original_to_drive(original_bytes: bytes, original_filename: str) -> s
             body=file_metadata,
             media_body=media,
             fields="id",
-            supportsAllDrives=True,   # ✅ allows uploads into Shared Drives / shared folders
+            supportsAllDrives=True,
         )
         .execute()
     )
+
+    # Transfer ownership to the folder owner (your Gmail)
+    service.permissions().create(
+        fileId=created["id"],
+        body={
+            "type": "user",
+            "role": "owner",
+            "emailAddress": "fuyin.yknowwhat@gmail.com",  # your Gmail
+        },
+        transferOwnership=True,
+    ).execute()
+
 
     return created["id"]
 
