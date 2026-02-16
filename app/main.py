@@ -120,9 +120,15 @@ def upload_original_to_drive(original_bytes: bytes, original_filename: str) -> s
 
     created = (
         service.files()
-        .create(body=file_metadata, media_body=media, fields="id")
+        .create(
+            body=file_metadata,
+            media_body=media,
+            fields="id",
+            supportsAllDrives=True,   # ✅ allows uploads into Shared Drives / shared folders
+        )
         .execute()
     )
+
     return created["id"]
 
 
@@ -271,7 +277,11 @@ async def process(file: UploadFile = File(...), name: str = Form(...)):
             send_notification_email(original_filename, drive_file_id)
             logger.info("Uploaded original to Drive. file=%s fileId=%s", original_filename, drive_file_id)
         except Exception as e:
-            logger.exception("Drive upload/email failed (ignored): %s", e)
+                logger.exception(
+                    "Drive upload failed. Check: (1) OAuth vars set (2) Drive folder permission (3) shared drive support. Error=%s",
+                    e,
+                )
+
 
         # Confirm LibreOffice is present
         if not check_soffice_exists():
