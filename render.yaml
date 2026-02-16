@@ -1,7 +1,6 @@
 services:
   - type: web
     name: pptx-watermark-webapp
-    env: python
+    env: docker
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
