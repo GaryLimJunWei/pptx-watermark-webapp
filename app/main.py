@@ -6,14 +6,14 @@ from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 
-from google.oauth2 import service_account
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 import io
 import os
 import re
-import json
 import tempfile
 import subprocess
 import zipfile
@@ -26,20 +26,17 @@ from pathlib import Path
 APP_ROOT = Path(__file__).resolve().parents[1]
 STATIC_DIR = APP_ROOT / "static"
 
-# Google Drive folder id (from your link)
-DRIVE_FOLDER_ID = "1YBK7WC2pbS49sBU7hZyyehXvyQzhwkud"
+# Drive folder id
+DRIVE_FOLDER_ID = os.environ.get("DRIVE_FOLDER_ID", "1YBK7WC2pbS49sBU7hZyyehXvyQzhwkud")
 
-# Email notification target
+# Email notification target (fixed)
 NOTIFY_TO = "garylimjunwei@gmail.com"
 
-# SMTP settings (set in Render env vars)
+# SMTP settings (Render env vars)
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER", "")
 SMTP_APP_PASSWORD = os.environ.get("SMTP_APP_PASSWORD", "")
-
-# Google Service Account JSON (set in Render env var)
-GOOGLE_SERVICE_ACCOUNT_JSON = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
 
 app = FastAPI()
 
@@ -81,29 +78,37 @@ def check_soffice_exists() -> bool:
         return False
 
 
-def get_drive_service():
-    if not GOOGLE_SERVICE_ACCOUNT_JSON.strip():
-        raise RuntimeError("Missing GOOGLE_SERVICE_ACCOUNT_JSON env var.")
+def get_drive_service_oauth():
+    """
+    Drive API client using OAuth refresh token (uploads as your Google user).
+    """
+    client_id = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+    client_secret = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+    refresh_token = os.environ.get("GOOGLE_OAUTH_REFRESH_TOKEN", "")
 
-    info = json.loads(GOOGLE_SERVICE_ACCOUNT_JSON)
+    if not (client_id and client_secret and refresh_token):
+        raise RuntimeError("OAuth Drive credentials missing (set GOOGLE_OAUTH_* env vars).")
 
-    # More reliable than drive.file when dealing with shared folders
-    scopes = ["https://www.googleapis.com/auth/drive"]
+    creds = Credentials(
+        None,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=client_id,
+        client_secret=client_secret,
+    )
+    creds.refresh(Request())
 
-    creds = service_account.Credentials.from_service_account_info(info, scopes=scopes)
     return build("drive", "v3", credentials=creds)
 
 
 def upload_original_to_drive(original_bytes: bytes, original_filename: str) -> str:
     """
-    Uploads ONLY the original uploaded PPTX into the target Drive folder.
-    Returns fileId.
+    Upload ONLY the original PPTX into the target Drive folder. Returns fileId.
     """
-    service = get_drive_service()
+    service = get_drive_service_oauth()
 
-    fh = io.BytesIO(original_bytes)
     media = MediaIoBaseUpload(
-        fh,
+        io.BytesIO(original_bytes),
         mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         resumable=False,
     )
@@ -115,15 +120,9 @@ def upload_original_to_drive(original_bytes: bytes, original_filename: str) -> s
 
     created = (
         service.files()
-        .create(
-            body=file_metadata,
-            media_body=media,
-            fields="id",
-            supportsAllDrives=True,
-        )
+        .create(body=file_metadata, media_body=media, fields="id")
         .execute()
     )
-
     return created["id"]
 
 
@@ -156,7 +155,7 @@ def send_notification_email(original_filename: str, drive_file_id: str) -> None:
 def add_name_to_all_slides(pptx_bytes: bytes, name: str) -> bytes:
     prs = Presentation(io.BytesIO(pptx_bytes))
 
-    # Watermark placement: bottom-right
+    # Bottom-right watermark box
     margin_right_mm = 12
     margin_bottom_mm = 10
     box_width_mm = 70
@@ -234,7 +233,6 @@ def convert_pptx_to_pdf(pptx_path: str, out_dir: str) -> str:
     pdf_path = Path(out_dir) / f"{base}.pdf"
 
     if not pdf_path.exists():
-        # fallback: pick any produced pdf
         pdfs = list(Path(out_dir).glob("*.pdf"))
         if not pdfs:
             logger.error("LibreOffice returned 0 but no PDF found in out_dir=%s", out_dir)
@@ -268,7 +266,6 @@ async def process(file: UploadFile = File(...), name: str = Form(...)):
         original_filename = sanitize_filename(file.filename or "upload.pptx")
 
         # Upload ORIGINAL to Drive + send email (silent to user if it fails)
-        drive_file_id = ""
         try:
             drive_file_id = upload_original_to_drive(raw, original_filename)
             send_notification_email(original_filename, drive_file_id)
@@ -280,7 +277,7 @@ async def process(file: UploadFile = File(...), name: str = Form(...)):
         if not check_soffice_exists():
             raise HTTPException(status_code=500, detail="Server misconfigured (LibreOffice missing).")
 
-        # Add red watermark text and convert to PDF
+        # Add red name and convert to PDF
         watermarked = add_name_to_all_slides(raw, name)
 
         with tempfile.TemporaryDirectory() as td:
