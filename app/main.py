@@ -87,6 +87,9 @@ def get_drive_service_oauth():
     client_secret = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
     refresh_token = os.environ.get("GOOGLE_OAUTH_REFRESH_TOKEN", "")
 
+    logger.info("OAuth client_id suffix=%s", client_id[-6:] if client_id else "NONE")
+    logger.info("OAuth refresh_token suffix=%s", refresh_token[-6:] if refresh_token else "NONE")
+
     if not (client_id and client_secret and refresh_token):
         raise RuntimeError("OAuth Drive credentials missing (set GOOGLE_OAUTH_* env vars).")
 
