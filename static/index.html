@@ -67,9 +67,15 @@ function run() {
       prog.value = 100;
 
       const url = URL.createObjectURL(blob);
+
+      let filename = "output.pdf";
+      const cd = response.headers.get("Content-Disposition") || "";
+      const m = cd.match(/filename="([^"]+)"/i);
+      if (m && m[1]) filename = m[1];
+
       const a = document.createElement("a");
       a.href = url;
-      a.download = "";
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();

@@ -316,7 +316,8 @@ async def process(file: UploadFile = File(...), name: str = Form(...)):
             pdf_path = convert_pptx_to_pdf(str(in_pptx), td)
             pdf_bytes = Path(pdf_path).read_bytes()
 
-        download_name = Path(original_filename).stem + "__named.pdf"
+        download_name = Path(original_filename).stem + ".pdf"
+
 
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
